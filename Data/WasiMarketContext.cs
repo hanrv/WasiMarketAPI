@@ -1,5 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using System.Reflection.Emit;
 using WasiMarketAPI.Models;
 
 namespace WasiMarketAPI.Data;
@@ -9,9 +8,11 @@ public class WasiMarketContext : DbContext
     public WasiMarketContext(DbContextOptions<WasiMarketContext> options) : base(options) { }
 
     public DbSet<Producto> Productos => Set<Producto>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Mapeo de la tabla PRODUCTO
         modelBuilder.Entity<Producto>(entity =>
         {
             entity.ToTable("PRODUCTO");
@@ -28,6 +29,22 @@ public class WasiMarketContext : DbContext
             entity.Property(e => e.UnidadMedida).HasColumnName("unidad_medida").HasMaxLength(20).IsRequired();
             entity.Property(e => e.ImagenUrl).HasColumnName("imagen_url").HasMaxLength(255);
             entity.Property(e => e.EstadoActivo).HasColumnName("estado_activo").HasDefaultValue(true);
+        });
+
+        // Mapeo de la tabla USUARIO
+        modelBuilder.Entity<Usuario>(entity =>
+        {
+            entity.ToTable("USUARIO");
+            entity.HasKey(e => e.Id).HasName("PK_usuario");
+
+            entity.Property(e => e.Id).HasColumnName("id_usuario").ValueGeneratedOnAdd();
+            entity.Property(e => e.Nombre).HasColumnName("nombre").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(100).IsRequired();
+
+            // Cambiar "password_hash" por "contrasena_hash":
+            entity.Property(e => e.PasswordHash).HasColumnName("contrasena_hash").HasMaxLength(255).IsRequired();
+
+            entity.Property(e => e.Rol).HasColumnName("rol").HasMaxLength(50).HasDefaultValue("Cliente");
         });
     }
 }
