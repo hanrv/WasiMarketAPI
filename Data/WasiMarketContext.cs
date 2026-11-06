@@ -38,13 +38,10 @@ public class WasiMarketContext : DbContext
             entity.HasKey(e => e.Id).HasName("PK_usuario");
 
             entity.Property(e => e.Id).HasColumnName("id_usuario").ValueGeneratedOnAdd();
-            entity.Property(e => e.Nombre).HasColumnName("nombre").HasMaxLength(100).IsRequired();
-            entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(100).IsRequired();
-
-            // Cambiar "password_hash" por "contrasena_hash":
-            entity.Property(e => e.PasswordHash).HasColumnName("contrasena_hash").HasMaxLength(255).IsRequired();
-
-            entity.Property(e => e.Rol).HasColumnName("rol").HasMaxLength(50).HasDefaultValue("Cliente");
+            entity.Property(e => e.Nombre).HasColumnName("nombre");
+            entity.Property(e => e.Email).HasColumnName("email").IsRequired();
+            entity.Property(e => e.PasswordHash).HasColumnName("contrasena_hash").IsRequired();
+            entity.Property(e => e.Rol).HasColumnName("rol");
         });
     }
 }
