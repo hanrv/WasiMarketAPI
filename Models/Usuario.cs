@@ -6,5 +6,5 @@ public class Usuario
     public string Nombre { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
-    public string Rol { get; set; } = "Cliente";
+    public string Rol { get; set; } = RolesUsuario.Cliente;
 }
