@@ -1,23 +1,27 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
+using System.Text;
 using WasiMarketAPI.Data;
 using WasiMarketAPI.Repositories;
 using WasiMarketAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Cadena de conexión y DbContext
+// 1. Inyección de controladores
+builder.Services.AddControllers();
+
+// 2. Conexión a Base de Datos (Entity Framework Core)
 builder.Services.AddDbContext<WasiMarketContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Registro de Repositorios y Servicios existentes
-// 2. Registro de Repositorios y Servicios existentes
+// 3. Inyección de dependencias (Dapper y Servicios)
 builder.Services.AddScoped<IProductoDapperRepository, ProductoDapperRepository>();
-builder.Services.AddScoped<ICarritoService, CarritoService>(); 
+builder.Services.AddScoped<ICarritoService, CarritoService>();
 
-// 3. Configuración del Middleware de Autenticación JWT
+// 4. Configuración de Autenticación con JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -25,8 +29,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]!)
-            ),
+                Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]!)),
             ValidateIssuer = true,
             ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
             ValidateAudience = true,
@@ -36,12 +39,41 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+
+// 5. Configuración de Swagger para JWT (Configuración de la última diapositiva)
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "WasiMarketAPI", Version = "v1" });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Ingresa 'Bearer' [espacio] y luego tu token.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
 
 var app = builder.Build();
 
+// 6. Pipeline HTTP
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -50,7 +82,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// El orden de ejecución es estricto
+// El orden es estricto: primero Authentication, luego Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 

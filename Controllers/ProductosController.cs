@@ -1,51 +1,58 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WasiMarketAPI.Data;
 using WasiMarketAPI.DTOs;
 using WasiMarketAPI.Models;
 using WasiMarketAPI.Repositories;
 
-namespace WasiMarketAPI.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class ProductosController : ControllerBase
+namespace WasiMarketAPI.Controllers
 {
-    private readonly WasiMarketContext _context;
-    private readonly IProductoDapperRepository _dapperRepo;
-
-    public ProductosController(WasiMarketContext context, IProductoDapperRepository dapperRepo)
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ProductosController : ControllerBase
     {
-        _context = context;
-        _dapperRepo = dapperRepo;
-    }
+        private readonly WasiMarketContext _context;
+        private readonly IProductoDapperRepository _dapperRepo;
 
-    // MicroORM (Dapper): Consulta masiva de catálogo activo
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<ProductoLecturaDTO>>> GetCatalogo()
-    {
-        var productos = await _dapperRepo.ObtenerCatalogoActivoAsync();
-        return Ok(productos);
-    }
-
-    // MicroORM (Dapper): Consulta puntual por ID
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<ProductoLecturaDTO>> GetPorId(int id)
-    {
-        var producto = await _dapperRepo.ObtenerPorIdAsync(id);
-        if (producto is null)
-            return NotFound(new { Mensaje = $"Producto con ID {id} no encontrado." });
-
-        return Ok(producto);
-    }
-
-    // ORM (EF Core): Inserción con validación de claves foráneas
-    [HttpPost]
-    public async Task<ActionResult<ProductoLecturaDTO>> CrearProducto([FromBody] ProductoCreateDTO dto)
-    {
-        try
+        public ProductosController(WasiMarketContext context, IProductoDapperRepository dapperRepo)
         {
-            var nuevo = new Producto
+            _context = context;
+            _dapperRepo = dapperRepo;
+        }
+
+        // 1. GET: Consulta privada del catálogo activo (vía Dapper)
+        [HttpGet]
+        public async Task<IActionResult> ObtenerTodos()
+        {
+            var productos = await _dapperRepo.ObtenerCatalogoActivoAsync();
+            return Ok(productos);
+        }
+
+        // 2. GET: Consulta privada por ID (vía Dapper)
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> ObtenerPorId(int id)
+        {
+            var producto = await _dapperRepo.ObtenerPorIdAsync(id);
+            if (producto == null)
+            {
+                return NotFound(new { mensaje = $"Producto con ID {id} no encontrado." });
+            }
+
+            return Ok(producto);
+        }
+
+        // 3. POST: Registro de nuevo producto (vía EF Core)
+        [HttpPost]
+        public async Task<IActionResult> Crear([FromBody] ProductoCreateDTO dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var nuevoProducto = new Producto
             {
                 IdTienda = dto.IdTienda,
                 IdCategoria = dto.IdCategoria,
@@ -59,81 +66,82 @@ public class ProductosController : ControllerBase
                 EstadoActivo = true
             };
 
-            _context.Productos.Add(nuevo);
+            _context.Productos.Add(nuevoProducto);
             await _context.SaveChangesAsync();
 
-            var lecturaDto = new ProductoLecturaDTO(
-                nuevo.IdProducto,
-                nuevo.IdTienda,
-                nuevo.IdCategoria,
-                nuevo.NombreProducto,
-                nuevo.Descripcion,
-                nuevo.PrecioUnitario,
-                nuevo.StockDisponible,
-                nuevo.StockMinimo,
-                nuevo.UnidadMedida,
-                nuevo.ImagenUrl,
-                nuevo.EstadoActivo
-            );
-
-            return CreatedAtAction(nameof(GetPorId), new { id = nuevo.IdProducto }, lecturaDto);
+            return CreatedAtAction(nameof(ObtenerPorId), new { id = nuevoProducto.IdProducto }, nuevoProducto);
         }
-        catch (DbUpdateException ex)
+
+        // 4. PUT: Actualización completa del producto (vía EF Core)
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Actualizar(int id, [FromBody] ProductoCreateDTO dto)
         {
-            return BadRequest(new
+            if (!ModelState.IsValid)
             {
-                Mensaje = "No se pudo registrar el producto en la base de datos.",
-                Detalle = "Verifica que 'idTienda' e 'idCategoria' existan previamente en WasiMarketDB.",
-                ErrorSql = ex.InnerException?.Message ?? ex.Message
-            });
-        }
-    }
+                return BadRequest(ModelState);
+            }
 
-    // ORM (EF Core): Modificación con captura de restricciones
-    [HttpPut("{id:int}")]
-    public async Task<IActionResult> ActualizarProducto(int id, [FromBody] ProductoCreateDTO dto)
-    {
-        var producto = await _context.Productos.FindAsync(id);
-        if (producto is null)
-            return NotFound(new { Mensaje = $"Producto con ID {id} no encontrado." });
+            var productoExistente = await _context.Productos.FindAsync(id);
+            if (productoExistente == null)
+            {
+                return NotFound(new { mensaje = $"Producto con ID {id} no existe." });
+            }
 
-        try
-        {
-            producto.IdTienda = dto.IdTienda;
-            producto.IdCategoria = dto.IdCategoria;
-            producto.NombreProducto = dto.NombreProducto;
-            producto.Descripcion = dto.Descripcion;
-            producto.PrecioUnitario = dto.PrecioUnitario;
-            producto.StockDisponible = dto.StockDisponible;
-            producto.StockMinimo = dto.StockMinimo;
-            producto.UnidadMedida = dto.UnidadMedida;
-            producto.ImagenUrl = dto.ImagenUrl;
+            productoExistente.IdTienda = dto.IdTienda;
+            productoExistente.IdCategoria = dto.IdCategoria;
+            productoExistente.NombreProducto = dto.NombreProducto;
+            productoExistente.Descripcion = dto.Descripcion;
+            productoExistente.PrecioUnitario = dto.PrecioUnitario;
+            productoExistente.StockDisponible = dto.StockDisponible;
+            productoExistente.StockMinimo = dto.StockMinimo;
+            productoExistente.UnidadMedida = dto.UnidadMedida;
+            productoExistente.ImagenUrl = dto.ImagenUrl;
 
             await _context.SaveChangesAsync();
-            return NoContent();
+
+            return Ok(new { mensaje = "Producto actualizado correctamente.", producto = productoExistente });
         }
-        catch (DbUpdateException ex)
+
+        // 5. PATCH: Actualización parcial (precio unitario)
+        [HttpPatch("{id:int}/precio")]
+        public async Task<IActionResult> ActualizarPrecio(int id, [FromBody] ActualizarPrecioDTO dto)
         {
-            return BadRequest(new
+            if (!ModelState.IsValid)
             {
-                Mensaje = "No se pudo actualizar el producto.",
-                Detalle = "Verifica que los IDs de tienda/categoría existan y cumplan las restricciones de tabla.",
-                ErrorSql = ex.InnerException?.Message ?? ex.Message
+                return BadRequest(ModelState);
+            }
+
+            var producto = await _context.Productos.FindAsync(id);
+            if (producto == null)
+            {
+                return NotFound(new { mensaje = $"Producto con ID {id} no encontrado." });
+            }
+
+            producto.PrecioUnitario = dto.NuevoPrecio;
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                mensaje = "Precio actualizado con éxito.",
+                idProducto = producto.IdProducto,
+                nuevoPrecio = producto.PrecioUnitario
             });
         }
-    }
 
-    // ORM (EF Core): Baja lógica de producto
-    [HttpDelete("{id:int}")]
-    public async Task<IActionResult> DesactivarProducto(int id)
-    {
-        var producto = await _context.Productos.FindAsync(id);
-        if (producto is null)
-            return NotFound(new { Mensaje = $"Producto con ID {id} no encontrado." });
+        // 6. DELETE: Baja lógica del producto
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Eliminar(int id)
+        {
+            var producto = await _context.Productos.FindAsync(id);
+            if (producto == null)
+            {
+                return NotFound(new { mensaje = $"Producto con ID {id} no encontrado." });
+            }
 
-        producto.EstadoActivo = false;
-        await _context.SaveChangesAsync();
+            producto.EstadoActivo = false;
+            await _context.SaveChangesAsync();
 
-        return NoContent();
+            return Ok(new { mensaje = $"Producto con ID {id} dado de baja exitosamente." });
+        }
     }
 }
